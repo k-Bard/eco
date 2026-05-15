@@ -17,6 +17,7 @@ from langgraph.types import Send
 
 from agents.market import run_market_agent
 from agents.competitor import run_competitor_agent
+from agents.discover import run_discover_agent
 
 
 class AgentState(TypedDict):
@@ -156,6 +157,105 @@ def build_graph():
     builder.add_conditional_edges("prepare", fanout_to_agents)
     builder.add_edge("market_agent", "synthesize")
     builder.add_edge("competitor_agent", "synthesize")
+    builder.add_edge("synthesize", END)
+
+    return builder.compile()
+
+
+# ── Discover mode: cross-category Top 5 ──
+
+
+class DiscoverState(TypedDict):
+    categories: Optional[list[dict]]
+    final_report: Optional[str]
+
+
+def discover_synthesize_node(state: DiscoverState) -> dict:
+    print("[Synthesize] Scoring categories and generating Top 5 report...")
+
+    client = OpenAI(
+        api_key=os.environ["DEEPSEEK_API_KEY"],
+        base_url="https://api.deepseek.com",
+    )
+
+    categories = state.get("categories") or []
+
+    # Build compact per-category summary for the prompt
+    cat_summaries = []
+    for i, cat in enumerate(categories, 1):
+        m = cat.get("market", {})
+        c = cat.get("competitor", {})
+        cat_summaries.append(
+            f"### Category {i}: {cat['name']}\n"
+            f"Market: {m.get('overview', 'N/A')[:500]}\n"
+            f"Competitors: {c.get('competitors', 'N/A')[:500]}"
+        )
+
+    prompt = f"""You are a senior e-commerce investment analyst. You have research data for {len(categories)} product categories. Score each category on 5 dimensions (1-10, 10=best), rank them, and select the TOP 5 for trade recommendation.
+
+## Scoring Dimensions
+1. **Market Size (市场规模)**: Current market size — bigger = higher score
+2. **Growth Rate (增长率)**: Year-over-year growth — faster = higher score
+3. **Low Competition (竞争度)**: Lower competition intensity = higher score (less saturated)
+4. **Profit Margin (利润空间)**: Typical margin potential — higher = higher score
+5. **Low Entry Barrier (入局门槛)**: Lower barrier = higher score (easier to enter)
+
+## Category Research Data
+
+{chr(10).join(cat_summaries)}
+
+## Output Template
+
+Write a comprehensive, bilingual (Chinese/English) Markdown report:
+
+# 跨境电商选品 Top 5 推荐报告 / E-Commerce Product Selection Top 5 Report
+
+## 评分总览 / Scoring Overview
+[Scoring table — all {len(categories)} categories × 5 dimensions + total score]
+
+## Top 1: [Category Name] / [品类名]
+### 推荐理由 / Why Recommended
+### 市场数据 / Market Data
+### 竞品格局 / Competitive Landscape
+### 选品方向 / Product Direction
+### 风险提示 / Risk Notes
+
+## Top 2: [Category Name] / [品类名]
+[...same structure...]
+
+## Top 3-5
+[Same structure for each]
+
+## 综合建议 / Overall Recommendation
+[Which categories to prioritize based on different seller profiles]
+
+## 数据来源 / Data Sources
+
+Write directly in Markdown. No preamble, no "here is the report"."""
+
+    report = _call_deepseek(client, prompt)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    output_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "output",
+    )
+    os.makedirs(output_dir, exist_ok=True)
+    filepath = os.path.join(output_dir, f"Top5_选品推荐_{timestamp}.md")
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(report)
+
+    return {"final_report": filepath}
+
+
+def build_discover_graph():
+    builder = StateGraph(DiscoverState)
+
+    builder.add_node("discover_scan", run_discover_agent)
+    builder.add_node("synthesize", discover_synthesize_node)
+
+    builder.add_edge(START, "discover_scan")
+    builder.add_edge("discover_scan", "synthesize")
     builder.add_edge("synthesize", END)
 
     return builder.compile()
