@@ -50,20 +50,12 @@ def _prompt_invest(keyword: str, result: dict) -> None:
         print("[Invest] 投资分析生成失败。")
 
 
-def main():
-    load_dotenv()
-
-    if "DEEPSEEK_API_KEY" not in os.environ:
-        print("Error: DEEPSEEK_API_KEY not set in .env file")
-        sys.exit(1)
-    if "TAVILY_API_KEY" not in os.environ:
-        print("Error: TAVILY_API_KEY not set in .env file")
-        sys.exit(1)
-
+def _run_cli():
+    """Legacy CLI mode — direct execution with arguments."""
     if len(sys.argv) < 2:
         print("Usage:")
         print("  python main.py <category-keyword>           Single category deep-dive")
-        print("  python main.py <category-keyword> --invest  Deep-dive + prompt for investment analysis")
+        print("  python main.py <category-keyword> --invest  Deep-dive + prompt for investment")
         print("  python main.py --discover                   Cross-category Top 5")
         print('Example: python main.py "AI硬件"')
         print('Example: python main.py "AI硬件" --invest')
@@ -101,6 +93,30 @@ def main():
     else:
         print("\nError: Failed to generate report")
         sys.exit(1)
+
+
+def main():
+    load_dotenv()
+
+    if "DEEPSEEK_API_KEY" not in os.environ:
+        print("Error: DEEPSEEK_API_KEY not set in .env file")
+        sys.exit(1)
+    if "TAVILY_API_KEY" not in os.environ:
+        print("Error: TAVILY_API_KEY not set in .env file")
+        sys.exit(1)
+
+    # Default: chat mode. Use --cli flag for legacy direct execution.
+    if len(sys.argv) >= 2 and sys.argv[1] == "--cli":
+        sys.argv.pop(1)
+        _run_cli()
+    elif len(sys.argv) >= 2 and sys.argv[1] in ("--discover",):
+        _run_cli()
+    elif len(sys.argv) >= 2 and not sys.argv[1].startswith("-"):
+        _run_cli()
+    else:
+        from agents.chat import start_chat
+
+        start_chat()
 
 
 if __name__ == "__main__":
