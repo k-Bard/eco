@@ -18,7 +18,6 @@ from langgraph.types import Send
 from agents.market import run_market_agent
 from agents.competitor import run_competitor_agent
 from agents.discover import run_discover_agent
-from agents.finance import run_finance_agent
 
 
 class AgentState(TypedDict):
@@ -26,8 +25,6 @@ class AgentState(TypedDict):
     market_result: Optional[dict]
     competitor_result: Optional[dict]
     final_report: Optional[str]
-    run_invest: Optional[bool]
-    invest_report: Optional[str]
 
 
 def prepare_node(state: AgentState) -> dict:
@@ -148,16 +145,6 @@ Write directly in Markdown. No preamble, no "here is the report" — output the 
     return {"final_report": filepath}
 
 
-def finance_agent_node(state: AgentState) -> dict:
-    return run_finance_agent(state)
-
-
-def _route_after_synthesize(state: AgentState) -> str:
-    if state.get("run_invest"):
-        return "finance_agent"
-    return END
-
-
 def build_graph():
     builder = StateGraph(AgentState)
 
@@ -165,17 +152,12 @@ def build_graph():
     builder.add_node("market_agent", market_agent_node)
     builder.add_node("competitor_agent", competitor_agent_node)
     builder.add_node("synthesize", synthesize_node)
-    builder.add_node("finance_agent", finance_agent_node)
 
     builder.add_edge(START, "prepare")
     builder.add_conditional_edges("prepare", fanout_to_agents)
     builder.add_edge("market_agent", "synthesize")
     builder.add_edge("competitor_agent", "synthesize")
-    builder.add_conditional_edges("synthesize", _route_after_synthesize, {
-        "finance_agent": "finance_agent",
-        END: END,
-    })
-    builder.add_edge("finance_agent", END)
+    builder.add_edge("synthesize", END)
 
     return builder.compile()
 

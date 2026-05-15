@@ -38,7 +38,7 @@ def _call_deepseek(client: OpenAI, prompt: str) -> str:
             raise RuntimeError(f"DeepSeek API error after retry: {e}") from e
 
 
-def _extract_companies(client: OpenAI, keyword: str, market: dict, competitor: dict) -> list[dict]:
+def extract_companies(client: OpenAI, keyword: str, market: dict, competitor: dict) -> list[dict]:
     """DeepSeek identifies listed companies from research data."""
     print("  [Finance] Extracting listed companies from research...")
 
@@ -93,24 +93,6 @@ def _fetch_astock_snapshot(code: str) -> dict:
         return {}
 
 
-def _fetch_astock_valuation(code: str) -> dict:
-    """AKShare: valuation history — latest PE, PB, PS."""
-    try:
-        df = ak.stock_a_lg_indicator(symbol=code)
-        if df.empty:
-            return {}
-        latest = df.iloc[-1]
-        return {
-            "pe_ttm": str(latest.get("pe", "N/A")),
-            "pe_dynamic": str(latest.get("pe_动态", "N/A")),
-            "pb": str(latest.get("pb", "N/A")),
-            "ps": str(latest.get("ps", "N/A")),
-            "market_cap_yuan": str(latest.get("total_mv", "N/A")),
-        }
-    except Exception as e:
-        print(f"    [AKShare] Valuation failed for {code}: {e}")
-        return {}
-
 
 def _enrich_with_akshare(company: dict) -> dict:
     """Try AKShare for A-shares. Returns enriched company or original on failure."""
@@ -121,9 +103,7 @@ def _enrich_with_akshare(company: dict) -> dict:
         return company
 
     print(f"    [AKShare] Fetching data for {company['name']} ({code})...")
-    snapshot = _fetch_astock_snapshot(code)
-    valuation = _fetch_astock_valuation(code)
-    akshare_data = {**snapshot, **valuation}
+    akshare_data = _fetch_astock_snapshot(code)
 
     if akshare_data:
         result = dict(company)
@@ -167,7 +147,7 @@ def run_finance_agent(state: dict) -> dict:
     market = state.get("market_result") or {}
     competitor = state.get("competitor_result") or {}
 
-    companies = _extract_companies(client, keyword, market, competitor)
+    companies = extract_companies(client, keyword, market, competitor)
     if not companies:
         print("  [Finance] No listed companies identified, skipping.")
         return {"invest_report": None}
