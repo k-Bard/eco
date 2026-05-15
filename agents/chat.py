@@ -62,6 +62,33 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "invest_companies",
+            "description": (
+                "直接投资分析用户指定的公司，跳过品类调研。"
+                "当用户明确提到具体公司名时调用，如'分析歌尔股份和立讯精密'、'帮我看看牧高笛'。"
+                "与 invest_analysis 区别：invest_analysis 需先跑品类调研再提取公司，"
+                "invest_companies 直接用用户给的公司名，更快更精准。"
+                "Direct investment analysis of user-specified companies."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "theme": {
+                        "type": "string",
+                        "description": "投资主题或行业，如 '户外露营产业链'、'AI硬件供应链'",
+                    },
+                    "companies": {
+                        "type": "string",
+                        "description": "公司名称，逗号分隔，如 '牧高笛,探路者'",
+                    },
+                },
+                "required": ["theme", "companies"],
+            },
+        },
+    },
 ]
 
 SYSTEM_PROMPT = """You are 选品助手, an AI e-commerce product selection assistant. You help users:
@@ -72,7 +99,8 @@ SYSTEM_PROMPT = """You are 选品助手, an AI e-commerce product selection assi
 Guidelines:
 - When a user asks about a specific product category, use research_product.
 - When a user asks about trending/trends or "what to sell", use discover_trending.
-- When a user mentions investment/stocks/listed companies, use invest_analysis.
+- When a user mentions investment/stocks/listed companies WITHOUT specifying company names, use invest_analysis (auto-extract from category research).
+- When a user mentions investment WITH specific company names (e.g. "分析歌尔股份"), use invest_companies (skip category research, go straight to those companies).
 - After a tool runs, tell the user what happened and suggest logical next steps.
   Example: After research, mention if there are listed companies in the report and ask if they want investment analysis.
 - Respond conversationally in the user's language (Chinese or English).
@@ -163,10 +191,22 @@ def _execute_invest(keyword: str) -> str:
     return preview
 
 
+def _execute_invest_direct(theme: str, companies: str) -> str:
+    from agents.finance import run_finance_agent_direct
+
+    print(f"\n[Chat -> Invest Direct] 主题: {theme} | 公司: {companies}")
+    result = run_finance_agent_direct(theme, companies)
+    invest_path = result.get("invest_report", "")
+    if invest_path:
+        return f"投资分析报告已生成: {invest_path}\n分析了 {companies}。如需查看详细报告请打开文件。"
+    return "投资分析报告生成失败，请检查公司名称是否正确。"
+
+
 TOOL_MAP = {
     "research_product": _execute_research,
     "discover_trending": _execute_discover,
     "invest_analysis": _execute_invest,
+    "invest_companies": _execute_invest_direct,
 }
 
 

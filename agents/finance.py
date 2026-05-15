@@ -135,34 +135,21 @@ def _enrich_with_tavily(company: dict) -> dict:
     return result
 
 
-def run_finance_agent(state: dict) -> dict:
-    print("\n[Finance] Starting investment analysis...")
-
-    client = OpenAI(
-        api_key=os.environ["DEEPSEEK_API_KEY"],
-        base_url="https://api.deepseek.com",
-    )
-
-    keyword = state["keyword"]
-    market = state.get("market_result") or {}
-    competitor = state.get("competitor_result") or {}
-
-    companies = extract_companies(client, keyword, market, competitor)
-    if not companies:
-        print("  [Finance] No listed companies identified, skipping.")
-        return {"invest_report": None}
-
-    print(f"  [Finance] Enriching {len(companies)} companies...")
+def _enrich_companies(companies: list[dict]) -> list[dict]:
+    """Enrich company list with AKShare (A-share) or Tavily (fallback)."""
     enriched = []
     for c in companies:
         result = _enrich_with_akshare(c)
         if "akshare_data" not in result:
             result = _enrich_with_tavily(c)
         enriched.append(result)
+    return enriched
 
-    print("  [Finance] Generating investment report...")
-    company_sections = []
-    for c in enriched:
+
+def _format_company_sections(companies: list[dict]) -> list[str]:
+    """Format enriched company data into prompt sections."""
+    sections = []
+    for c in companies:
         header = f"### {c['name']} ({c.get('code', 'N/A')} - {c.get('exchange', 'N/A')})\n"
         header += f"Role: {c.get('role', 'N/A')}\n"
         header += f"Data Source: {c.get('data_source', 'Unknown')}\n"
@@ -180,7 +167,13 @@ def run_finance_agent(state: dict) -> dict:
         else:
             header += f"Financial Data: {c.get('financial_snippets', 'N/A')}\n"
 
-        company_sections.append(header)
+        sections.append(header)
+    return sections
+
+
+def _generate_and_save_report(client: OpenAI, keyword: str, companies: list[dict]) -> str:
+    """Generate investment report via DeepSeek and save to output/."""
+    company_sections = _format_company_sections(companies)
 
     prompt = f"""You are a senior equity research analyst. Based on the supply chain research for "{keyword}", write a comprehensive investment analysis report in bilingual (Chinese/English) Markdown format.
 
@@ -233,4 +226,66 @@ Include disclaimer: "本报告仅供参考，不构成投资建议."""
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(invest_report)
 
+    return filepath
+
+
+def run_finance_agent(state: dict) -> dict:
+    """Auto-extract companies from research data, then generate investment report."""
+    print("\n[Finance] Starting investment analysis...")
+
+    client = OpenAI(
+        api_key=os.environ["DEEPSEEK_API_KEY"],
+        base_url="https://api.deepseek.com",
+    )
+
+    keyword = state["keyword"]
+    market = state.get("market_result") or {}
+    competitor = state.get("competitor_result") or {}
+
+    companies = extract_companies(client, keyword, market, competitor)
+    if not companies:
+        print("  [Finance] No listed companies identified, skipping.")
+        return {"invest_report": None}
+
+    print(f"  [Finance] Enriching {len(companies)} companies...")
+    enriched = _enrich_companies(companies)
+
+    print("  [Finance] Generating investment report...")
+    filepath = _generate_and_save_report(client, keyword, enriched)
+    return {"invest_report": filepath}
+
+
+def run_finance_agent_direct(keyword: str, company_names: str) -> dict:
+    """Direct investment analysis — user specifies companies, skip extraction.
+
+    Args:
+        keyword: Investment theme or industry name
+        company_names: Comma-separated company names, e.g. "牧高笛,探路者,歌尔股份"
+    """
+    print(f"\n[Finance Direct] Starting investment analysis for: {company_names}")
+
+    client = OpenAI(
+        api_key=os.environ["DEEPSEEK_API_KEY"],
+        base_url="https://api.deepseek.com",
+    )
+
+    companies = []
+    for name in company_names.split(","):
+        name = name.strip()
+        if name:
+            companies.append({
+                "name": name,
+                "code": "",
+                "exchange": "",
+                "role": "用户指定 / User-specified",
+            })
+
+    if not companies:
+        return {"invest_report": None}
+
+    print(f"  [Finance Direct] Enriching {len(companies)} companies...")
+    enriched = _enrich_companies(companies)
+
+    print("  [Finance Direct] Generating investment report...")
+    filepath = _generate_and_save_report(client, keyword, enriched)
     return {"invest_report": filepath}
