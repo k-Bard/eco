@@ -2,8 +2,9 @@ from skills.search import search
 
 
 def run_market_agent(state: dict) -> dict:
-    keyword = state["keyword"]
-    results: list[dict] = []
+    keyword = state.get("keyword")
+    if not keyword or not keyword.strip():
+        raise ValueError("state must contain a non-empty 'keyword'")
     queries = [
         f"{keyword} 市场规模 发展趋势",
         f"{keyword} 行业分析 增长前景",
@@ -16,7 +17,10 @@ def run_market_agent(state: dict) -> dict:
 
     overview_parts = []
     for r in results:
-        overview_parts.append(f"- {r['title']}: {r['content'][:200]}...")
+        title = r.get("title", "")
+        content = r.get("content", "")
+        if title and content:
+            overview_parts.append(f"- {title}: {content[:200]}...")
 
     overview = "\n".join(overview_parts) if overview_parts else "Insufficient data"
 
