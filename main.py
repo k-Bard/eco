@@ -15,9 +15,11 @@ def main():
 
     if len(sys.argv) < 2:
         print("Usage:")
-        print("  python main.py <category-keyword>    Single category deep-dive report")
-        print("  python main.py --discover            Cross-category Top 5 recommendation")
-        print('Example: python main.py "智能眼镜"')
+        print("  python main.py <category-keyword>           Single category deep-dive")
+        print("  python main.py <category-keyword> --invest  Deep-dive + investment report")
+        print("  python main.py --discover                   Cross-category Top 5")
+        print('Example: python main.py "AI硬件"')
+        print('Example: python main.py "AI硬件" --invest')
         print("Example: python main.py --discover")
         sys.exit(1)
 
@@ -28,16 +30,21 @@ def main():
         result = graph.invoke({})
     else:
         keyword = sys.argv[1]
+        run_invest = "--invest" in sys.argv
 
         from agents.orchestrator import build_graph
 
         graph = build_graph()
-        result = graph.invoke({"keyword": keyword})
+        result = graph.invoke({"keyword": keyword, "run_invest": run_invest})
 
     output_path = result.get("final_report")
+    invest_path = result.get("invest_report")
+
     if output_path:
-        print(f"\nReport saved to: {output_path}")
-    else:
+        print(f"\n[选品报告] {output_path}")
+    if invest_path:
+        print(f"[投资分析] {invest_path}")
+    if not output_path and not invest_path:
         print("\nError: Failed to generate report")
         sys.exit(1)
 
