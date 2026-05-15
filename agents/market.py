@@ -5,6 +5,7 @@ def run_market_agent(state: dict) -> dict:
     keyword = state.get("keyword")
     if not keyword or not keyword.strip():
         raise ValueError("state must contain a non-empty 'keyword'")
+    results: list[dict] = []
     queries = [
         f"{keyword} 市场规模 发展趋势",
         f"{keyword} 行业分析 增长前景",
